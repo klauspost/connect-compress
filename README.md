@@ -13,7 +13,7 @@ formats.
 
 ```Go
     // Get client and server options for all compressors...
-clientOpts, serverOpts := compress.All(compress.LevelBalanced)
+    clientOpts, serverOpts := compress.All(compress.LevelBalanced)
 ```
 
 To enable client compression and force a specific method use `connect.WithSendCompression(...)`
@@ -39,11 +39,15 @@ Zstandard compresses better and is faster than gzip.
 
 Expected performance is ~300MB/s on JSON streams. Size ~35% smaller than gzip on JSON stream.
 
+With `OptAllowMultithreadedCompression` typically 2 goroutines will be used.
+
 ## Snappy
 
 [Snappy](https://github.com/google/snappy) uses Google snappy format.
 
 Expected performance is ~550MB/s on JSON streams. Size ~50% bigger than gzip on JSON stream.
+
+With `OptAllowMultithreadedCompression` all cores can used for a roughly linear speed improvement.
 
 ## S2
 
@@ -51,6 +55,8 @@ Expected performance is ~550MB/s on JSON streams. Size ~50% bigger than gzip on 
 similar or better speeds.
 
 Expected performance is ~750MB/s on JSON streams. Size ~2% bigger than gzip on JSON stream.
+
+With `OptAllowMultithreadedCompression` all cores can used for a roughly linear speed improvement.
 
 # License
 
