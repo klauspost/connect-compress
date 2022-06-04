@@ -19,7 +19,14 @@ clientOpts, serverOpts := compress.All(compress.LevelBalanced)
 To enable client compression and force a specific method use `connect.WithSendCompression(...)`
 with one of the 4 provided compression options.
 
+* `S2` can be selected for transparent compression, since its performance impact is small.
+* `Snappy` can be used as a more platform independent alternative, with overall less compression.
+* `Zstandard` can be used for efficient compression at good speeds.
+* `Gzip` is the safe fallback.
+
 For more details and options see the [documentation](https://pkg.go.dev/github.com/klauspost/connect-compress).
+
+Note than when `OptSmallWindow` is used, it must be used on both the client and server.
 
 # Supported Formats
 
@@ -54,6 +61,8 @@ Gzip, stdlib as available in `go-connect` for reference:
 |--------------------|--------|--------|---------|----------------|
 |               MB/s | 96.05  |  45.61 |   89.93 | 62.74          |
 |          Reduction | 85.61% | 76.62% |  85.01% | -0.03%         |
+
+`OptSmallWindow` has no effect on gzip, since it is limited to a 32KB window already.
 
 ## Zstandard
 
@@ -97,6 +106,8 @@ Approximate speeds on different data types. Compression only, single thread:
 With `OptAllowMultithreadedCompression` all cores can used for a roughly linear speed improvement.
 
 Decompression will usually be limited at around 1000MB/s.
+
+`OptSmallWindow` has no effect on Snappy, since it is limited to 64KB window already.
 
 ## S2
 
