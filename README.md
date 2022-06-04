@@ -2,7 +2,7 @@
 
 [![GoDoc](https://pkg.go.dev/badge/github.com/klauspost/connect-compress.svg)](https://pkg.go.dev/github.com/klauspost/connect-compress)
 
-This package provides improved compression schemes for [Buf Connect](github.com/bufbuild/connect-go).
+This package provides improved compression schemes for [Buf Connect](https://github.com/bufbuild/connect-go).
 
 Compression is provided from the [github.com/klauspost/compress](https://github.com/klauspost/compress) package.
 
