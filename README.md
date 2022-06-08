@@ -11,10 +11,12 @@ Compression is provided from the [github.com/klauspost/compress](https://github.
 The `compress.All` function will return options that allow both client and servers to compress and decompress all
 formats.
 
-```Go
-    // Get client and server options for all compressors...
-clientOpts, serverOpts := compress.All(compress.LevelBalanced)
 ```
+    // Get client and server options for all compressors...
+    clientOpts, serverOpts := compress.All(compress.LevelBalanced)
+```
+
+By default the order of preference by the clients is S2, Snappy, Zstandard, Gzip.
 
 To enable client compression and force a specific method use `connect.WithSendCompression(...)`
 with one of the 4 provided compression options.

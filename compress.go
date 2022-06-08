@@ -99,11 +99,12 @@ const (
 )
 
 // All returns client and handler options for all compression methods.
+// Order of preference is S2, Snappy, Zstandard, Gzip.
 func All(level Level, options ...Opts) (connect.ClientOption, connect.HandlerOption) {
 	var hopts []connect.HandlerOption
 	var copts []connect.ClientOption
 
-	for _, name := range []string{S2, Snappy, Zstandard, Gzip} {
+	for _, name := range []string{Gzip, Zstandard, Snappy, S2} {
 		c, h := Select(name, level, options...)
 		copts = append(copts, c)
 		hopts = append(hopts, h)
