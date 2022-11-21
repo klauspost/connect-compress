@@ -98,9 +98,14 @@ const (
 	optSnappy
 )
 
-// All returns client and handler options for all compression methods.
+type compressorOption struct {
+	connect.ClientOption
+	connect.HandlerOption
+}
+
+// All returns the client and handler option for all compression methods.
 // Order of preference is S2, Snappy, Zstandard, Gzip.
-func All(level Level, options ...Opts) (connect.ClientOption, connect.HandlerOption) {
+func All(level Level, options ...Opts) connect.Option {
 	var hopts []connect.HandlerOption
 	var copts []connect.ClientOption
 
@@ -109,8 +114,10 @@ func All(level Level, options ...Opts) (connect.ClientOption, connect.HandlerOpt
 		copts = append(copts, c)
 		hopts = append(hopts, h)
 	}
-
-	return connect.WithClientOptions(copts...), connect.WithHandlerOptions(hopts...)
+	return &compressorOption{
+		ClientOption:  connect.WithClientOptions(copts...),
+		HandlerOption: connect.WithHandlerOptions(hopts...),
+	}
 }
 
 // Select returns client and handler options for a single compression method.

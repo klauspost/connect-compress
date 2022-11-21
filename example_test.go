@@ -29,15 +29,15 @@ import (
 
 func ExampleAll() {
 	// Get client and server options for all compressors...
-	clientOpts, serverOpts := compress.All(compress.LevelBalanced)
+	opts := compress.All(compress.LevelBalanced)
 
 	// Create a server.
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, serverOpts)
+	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opts)
 	srv := httptest.NewServer(h)
 	client := pingv1connect.NewPingServiceClient(
 		http.DefaultClient,
 		srv.URL,
-		clientOpts,
+		opts,
 		// Compress requests with S2.
 		connect.WithSendCompression(compress.S2),
 	)
