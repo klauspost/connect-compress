@@ -29,7 +29,7 @@ import (
 
 func ExampleAll() {
 	// Get client and server options for all compressors...
-	opts := compress.All(compress.LevelBalanced)
+	opts := compress.WithAll(compress.LevelBalanced)
 
 	// Create a server.
 	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opts)

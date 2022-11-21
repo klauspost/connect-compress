@@ -103,9 +103,9 @@ type compressorOption struct {
 	connect.HandlerOption
 }
 
-// All returns the client and handler option for all compression methods.
+// WithAll returns the client and handler option for all compression methods.
 // Order of preference is S2, Snappy, Zstandard, Gzip.
-func All(level Level, options ...Opts) connect.Option {
+func WithAll(level Level, options ...Opts) connect.Option {
 	var hopts []connect.HandlerOption
 	var copts []connect.ClientOption
 
