@@ -27,8 +27,8 @@ import (
 	"github.com/klauspost/connect-compress/internal/gen/connect/ping/v1/pingv1connect"
 )
 
-func ExampleAll() {
-	// Get client and server options for all compressors...
+func ExampleWithAll() {
+	// Get the client and server option for all compressors...
 	opts := compress.WithAll(compress.LevelBalanced)
 
 	// Create a server.
