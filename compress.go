@@ -106,23 +106,17 @@ type compressorOption struct {
 // WithAll returns the client and handler option for all compression methods.
 // Order of preference is S2, Snappy, Zstandard, Gzip.
 func WithAll(level Level, options ...Opts) connect.Option {
-	var hopts []connect.HandlerOption
-	var copts []connect.ClientOption
+	var opts []connect.Option
 
 	for _, name := range []string{Gzip, Zstandard, Snappy, S2} {
-		c, h := Select(name, level, options...)
-		copts = append(copts, c)
-		hopts = append(hopts, h)
+		opts = append(opts, Select(name, level, options...))
 	}
-	return &compressorOption{
-		ClientOption:  connect.WithClientOptions(copts...),
-		HandlerOption: connect.WithHandlerOptions(hopts...),
-	}
+	return connect.WithOptions(opts...)
 }
 
 // Select returns client and handler options for a single compression method.
 // Name must be one of the predefined in this package.
-func Select(name string, level Level, options ...Opts) (connect.ClientOption, connect.HandlerOption) {
+func Select(name string, level Level, options ...Opts) connect.Option {
 	var o Opts
 	for _, opt := range options {
 		o = o | opt
@@ -142,7 +136,10 @@ func Select(name string, level Level, options ...Opts) (connect.ClientOption, co
 	default:
 		panic(fmt.Errorf("unknown compression name: %s", name))
 	}
-	return connect.WithAcceptCompression(name, d, c), connect.WithCompression(name, d, c)
+	return &compressorOption{
+		ClientOption:  connect.WithAcceptCompression(name, d, c),
+		HandlerOption: connect.WithCompression(name, d, c),
+	}
 }
 
 func gzComp(level Level, o Opts) (d func() connect.Decompressor, c func() connect.Compressor) {
