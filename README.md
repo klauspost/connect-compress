@@ -8,12 +8,19 @@ Compression is provided from the [github.com/klauspost/compress](https://github.
 
 # Usage
 
-The `compress.All` function will return options that allow both client and servers to compress and decompress all
+The `compress.WithAll` function will return an option that allows both client and servers to compress and decompress all
 formats.
 
 ```
-    // Get client and server options for all compressors...
-    clientOpts, serverOpts := compress.All(compress.LevelBalanced)
+    // Get the client and server option for all compressors...
+    opts := compress.WithAll(compress.LevelBalanced)
+
+    // enable on server
+    _, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opts)
+
+    // enable on client
+    client := pingv1connect.NewPingServiceClient(http.DefaultClient, url, opts)
+
 ```
 
 By default the order of preference by the clients is S2, Snappy, Zstandard, Gzip.

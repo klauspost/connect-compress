@@ -27,17 +27,17 @@ import (
 	"github.com/klauspost/connect-compress/internal/gen/connect/ping/v1/pingv1connect"
 )
 
-func ExampleAll() {
-	// Get client and server options for all compressors...
-	clientOpts, serverOpts := compress.All(compress.LevelBalanced)
+func ExampleWithAll() {
+	// Get the client and server option for all compressors...
+	opts := compress.WithAll(compress.LevelBalanced)
 
 	// Create a server.
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, serverOpts)
+	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opts)
 	srv := httptest.NewServer(h)
 	client := pingv1connect.NewPingServiceClient(
 		http.DefaultClient,
 		srv.URL,
-		clientOpts,
+		opts,
 		// Compress requests with S2.
 		connect.WithSendCompression(compress.S2),
 	)
@@ -59,13 +59,13 @@ func ExampleAll() {
 
 func ExampleSelect() {
 	// Add Zstandard.
-	clientOpts, serverOpts := compress.Select(compress.Zstandard, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, serverOpts)
+	opt := compress.WithNew(compress.Zstandard, compress.LevelBalanced)
+	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
 	srv := httptest.NewServer(h)
 	client := pingv1connect.NewPingServiceClient(
 		http.DefaultClient,
 		srv.URL,
-		clientOpts,
+		opt,
 		// Enable request compression
 		connect.WithSendCompression(compress.Zstandard),
 	)
@@ -87,13 +87,13 @@ func ExampleSelect() {
 
 func ExampleSelect2() {
 	// Add Zstandard.
-	clientOpts, serverOpts := compress.Select(compress.Snappy, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, serverOpts)
+	opt := compress.WithNew(compress.Snappy, compress.LevelBalanced)
+	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
 	srv := httptest.NewServer(h)
 	client := pingv1connect.NewPingServiceClient(
 		http.DefaultClient,
 		srv.URL,
-		clientOpts,
+		opt,
 		// Enable request compression
 		connect.WithSendCompression(compress.Snappy),
 	)
@@ -115,13 +115,13 @@ func ExampleSelect2() {
 
 func ExampleSelect3() {
 	// Add Zstandard.
-	clientOpts, serverOpts := compress.Select(compress.S2, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, serverOpts)
+	opt := compress.WithNew(compress.S2, compress.LevelBalanced)
+	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
 	srv := httptest.NewServer(h)
 	client := pingv1connect.NewPingServiceClient(
 		http.DefaultClient,
 		srv.URL,
-		clientOpts,
+		opt,
 		// Enable request compression
 		connect.WithSendCompression(compress.S2),
 	)
@@ -143,13 +143,13 @@ func ExampleSelect3() {
 
 func ExampleSelect4() {
 	// Add Zstandard.
-	clientOpts, serverOpts := compress.Select(compress.Gzip, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, serverOpts)
+	opt := compress.WithNew(compress.Gzip, compress.LevelBalanced)
+	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
 	srv := httptest.NewServer(h)
 	client := pingv1connect.NewPingServiceClient(
 		http.DefaultClient,
 		srv.URL,
-		clientOpts,
+		opt,
 		// Enable request compression
 		connect.WithSendCompression(compress.Gzip),
 	)
