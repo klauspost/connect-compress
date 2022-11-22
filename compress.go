@@ -109,14 +109,14 @@ func WithAll(level Level, options ...Opts) connect.Option {
 	var opts []connect.Option
 
 	for _, name := range []string{Gzip, Zstandard, Snappy, S2} {
-		opts = append(opts, Select(name, level, options...))
+		opts = append(opts, WithNew(name, level, options...))
 	}
 	return connect.WithOptions(opts...)
 }
 
-// Select returns client and handler options for a single compression method.
+// WithNew returns client and handler options for a single compression method.
 // Name must be one of the predefined in this package.
-func Select(name string, level Level, options ...Opts) connect.Option {
+func WithNew(name string, level Level, options ...Opts) connect.Option {
 	var o Opts
 	for _, opt := range options {
 		o = o | opt
