@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	v1 "github.com/klauspost/connect-compress/internal/gen/connect/ping/v1"
+	v1 "github.com/klauspost/connect-compress/v2/internal/gen/connect/ping/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are

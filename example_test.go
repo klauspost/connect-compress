@@ -22,9 +22,9 @@ import (
 	"net/http/httptest"
 
 	"connectrpc.com/connect"
-	compress "github.com/klauspost/connect-compress"
-	pingv1 "github.com/klauspost/connect-compress/internal/gen/connect/ping/v1"
-	"github.com/klauspost/connect-compress/internal/gen/connect/ping/v1/pingv1connect"
+	"github.com/klauspost/connect-compress/v2"
+	pingv1 "github.com/klauspost/connect-compress/v2/internal/gen/connect/ping/v1"
+	"github.com/klauspost/connect-compress/v2/internal/gen/connect/ping/v1/pingv1connect"
 )
 
 func ExampleWithAll() {

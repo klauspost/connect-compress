@@ -1,4 +1,4 @@
-module github.com/klauspost/connect-compress
+module github.com/klauspost/connect-compress/v2
 
 go 1.18
 
