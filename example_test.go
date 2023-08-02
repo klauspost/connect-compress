@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/bufbuild/connect-go"
+	"connectrpc.com/connect"
 	compress "github.com/klauspost/connect-compress"
 	pingv1 "github.com/klauspost/connect-compress/internal/gen/connect/ping/v1"
 	"github.com/klauspost/connect-compress/internal/gen/connect/ping/v1/pingv1connect"

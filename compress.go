@@ -17,9 +17,8 @@ package compress
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 
-	"github.com/bufbuild/connect-go"
+	"connectrpc.com/connect"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/s2"
 	"github.com/klauspost/compress/zstd"
@@ -147,18 +146,21 @@ func gzComp(level Level, o Opts) (d func() connect.Decompressor, c func() connec
 			return &gzip.Reader{}
 		}, func() connect.Compressor {
 			if o.contains(OptStatelessGzip) {
-				gz, _ := gzip.NewWriterLevel(ioutil.Discard, gzip.StatelessCompression)
+				gz, _ := gzip.NewWriterLevel(io.Discard, gzip.StatelessCompression)
 				return gz
 			}
 			switch level {
 			case LevelFastest:
-				gz, _ := gzip.NewWriterLevel(ioutil.Discard, 1)
+				gz, _ := gzip.NewWriterLevel(io.Discard, 1)
+				return gz
+			case LevelBalanced:
+				gz, _ := gzip.NewWriterLevel(io.Discard, 5)
 				return gz
 			case LevelSmallest:
-				gz, _ := gzip.NewWriterLevel(ioutil.Discard, 9)
+				gz, _ := gzip.NewWriterLevel(io.Discard, 9)
 				return gz
 			}
-			return gzip.NewWriter(ioutil.Discard)
+			return gzip.NewWriter(io.Discard)
 		}
 }
 
