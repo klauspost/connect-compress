@@ -22,6 +22,7 @@ import (
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/s2"
 	"github.com/klauspost/compress/zstd"
+	"github.com/minio/minlz"
 )
 
 // Level provides 3 predefined compression levels.
@@ -64,6 +65,10 @@ const (
 	// Expected performance is ~750MB/s on JSON streams.
 	// Size ~2% bigger than gzip on JSON stream.
 	S2 = "s2"
+
+	// MinLZ provides better compression than Snappy/S2 at similar speeds.
+	// See https://github.com/minio/minlz
+	MinLZ = "minlz"
 )
 
 // Opts provides options
@@ -103,11 +108,11 @@ type compressorOption struct {
 }
 
 // WithAll returns the client and handler option for all compression methods.
-// Order of preference is S2, Snappy, Zstandard, Gzip.
+// Order of preference is MinLZ, S2, Snappy, Zstandard, Gzip.
 func WithAll(level Level, options ...Opts) connect.Option {
 	var opts []connect.Option
 
-	for _, name := range []string{Gzip, Zstandard, Snappy, S2} {
+	for _, name := range []string{Gzip, Zstandard, Snappy, S2, MinLZ} {
 		opts = append(opts, WithNew(name, level, options...))
 	}
 	return connect.WithOptions(opts...)
@@ -132,6 +137,8 @@ func WithNew(name string, level Level, options ...Opts) connect.Option {
 		d, c = s2Comp(level, o)
 	case S2:
 		d, c = s2Comp(level, o)
+	case MinLZ:
+		d, c = mzComp(level, o)
 	default:
 		panic(fmt.Errorf("unknown compression name: %s", name))
 	}
@@ -267,6 +274,56 @@ func (s *s2rWrapper) Close() error {
 }
 
 func (s *s2rWrapper) Reset(reader io.Reader) error {
+	s.dec.Reset(reader)
+	return nil
+}
+
+func mzComp(level Level, o Opts) (d func() connect.Decompressor, c func() connect.Compressor) {
+	var wopts []minlz.WriterOption
+	var ropts []minlz.ReaderOption
+	if o.contains(OptSmallWindow) {
+		wopts = append(wopts, minlz.WriterBlockSize(maxLimitedWindow))
+		ropts = append(ropts, minlz.ReaderMaxBlockSize(maxLimitedWindow))
+	}
+
+	if !o.contains(OptAllowMultithreadedCompression) {
+		wopts = append(wopts, minlz.WriterConcurrency(1))
+	}
+
+	switch level {
+	case LevelFastest:
+		wopts = append(wopts, minlz.WriterLevel(minlz.LevelFastest))
+	case LevelBalanced:
+		wopts = append(wopts, minlz.WriterLevel(minlz.LevelBalanced))
+	case LevelSmallest:
+		wopts = append(wopts, minlz.WriterLevel(minlz.LevelSmallest))
+		if !o.contains(OptSmallWindow) {
+			wopts = append(wopts, minlz.WriterBlockSize(8<<20))
+		}
+	}
+
+	return func() connect.Decompressor {
+			dec := minlz.NewReader(nil, ropts...)
+			return &mzWrapper{dec: dec}
+		}, func() connect.Compressor {
+			return minlz.NewWriter(nil, wopts...)
+		}
+}
+
+type mzWrapper struct {
+	dec *minlz.Reader
+}
+
+func (s *mzWrapper) Read(p []byte) (n int, err error) {
+	return s.dec.Read(p)
+}
+
+func (s *mzWrapper) Close() error {
+	s.dec.Reset(nil)
+	return nil
+}
+
+func (s *mzWrapper) Reset(reader io.Reader) error {
 	s.dec.Reset(reader)
 	return nil
 }

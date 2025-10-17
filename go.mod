@@ -1,9 +1,10 @@
 module github.com/klauspost/connect-compress/v2
 
-go 1.18
+go 1.24.0
 
 require (
-	connectrpc.com/connect v1.11.0
-	github.com/klauspost/compress v1.16.7
-	google.golang.org/protobuf v1.31.0
+	connectrpc.com/connect v1.19.1
+	github.com/klauspost/compress v1.18.0
+	github.com/minio/minlz v1.0.1
+	google.golang.org/protobuf v1.36.10
 )

@@ -20,6 +20,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/klauspost/connect-compress/v2"
@@ -57,7 +58,7 @@ func ExampleWithAll() {
 	//hello!
 }
 
-func ExampleSelect() {
+func ExampleWithNew_zstd() {
 	// Add Zstandard.
 	opt := compress.WithNew(compress.Zstandard, compress.LevelBalanced)
 	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
@@ -85,7 +86,7 @@ func ExampleSelect() {
 	//hello!
 }
 
-func ExampleSelect2() {
+func ExampleWithNew_snappy() {
 	// Add Zstandard.
 	opt := compress.WithNew(compress.Snappy, compress.LevelBalanced)
 	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
@@ -113,7 +114,7 @@ func ExampleSelect2() {
 	//hello!
 }
 
-func ExampleSelect3() {
+func ExampleWithNew_s2() {
 	// Add Zstandard.
 	opt := compress.WithNew(compress.S2, compress.LevelBalanced)
 	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
@@ -141,7 +142,7 @@ func ExampleSelect3() {
 	//hello!
 }
 
-func ExampleSelect4() {
+func ExampleWithNew_gzip() {
 	// Add Zstandard.
 	opt := compress.WithNew(compress.Gzip, compress.LevelBalanced)
 	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
@@ -184,7 +185,37 @@ func (ps *pingServer) Ping(
 		// req.Msg is a strongly-typed *pingv1.PingRequest, so we can access its
 		// fields without type assertions.
 		Number: req.Msg.Number,
+		Text:   req.Msg.Text,
 	})
 	res.Header().Set("Some-Other-Header", "hello!")
 	return res, nil
+}
+
+func ExampleWithNew_minlz() {
+	// Use MinLZ.
+	opt := compress.WithNew(compress.MinLZ, compress.LevelBalanced)
+	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
+	srv := httptest.NewServer(h)
+	client := pingv1connect.NewPingServiceClient(
+		http.DefaultClient,
+		srv.URL,
+		opt,
+		// Enable request compression
+		connect.WithSendCompression(compress.MinLZ),
+	)
+	req := connect.NewRequest(&pingv1.PingRequest{
+		Number: 42,
+		Text:   strings.Repeat("a", 50),
+	})
+	req.Header().Set("Some-Header", "hello from connect")
+	res, err := client.Ping(context.Background(), req)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println("The answer is", res.Msg.Number)
+	fmt.Println("Text is", res.Msg.Text)
+	//OUTPUT:
+	//hello from connect
+	//The answer is 42
+	//Text is aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 }
