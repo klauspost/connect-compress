@@ -17,6 +17,7 @@ package compress
 import (
 	"fmt"
 	"io"
+	"runtime"
 
 	"connectrpc.com/connect"
 	"github.com/klauspost/compress/gzip"
@@ -210,7 +211,11 @@ func zstdComp(level Level, o Opts) (d func() connect.Decompressor, c func() conn
 	}
 	return func() connect.Decompressor {
 			zs, _ := zstd.NewReader(nil, dopts...)
-			return &zstdWrapper{ReadCloser: zs.IOReadCloser(), dec: zs}
+			z := &zstdWrapper{dec: zs}
+			runtime.AddCleanup(z, func(dec *zstd.Decoder) {
+				dec.Close()
+			}, zs)
+			return z
 		}, func() connect.Compressor {
 			zs, _ := zstd.NewWriter(nil, copts...)
 			return zs
@@ -218,8 +223,16 @@ func zstdComp(level Level, o Opts) (d func() connect.Decompressor, c func() conn
 }
 
 type zstdWrapper struct {
-	io.ReadCloser
 	dec *zstd.Decoder
+}
+
+func (z *zstdWrapper) Read(p []byte) (n int, err error) {
+	return z.dec.Read(p)
+}
+
+func (z *zstdWrapper) Close() error {
+	// Do not close so it can be reused, but de-ref the input.
+	return z.dec.Reset(nil)
 }
 
 func (z *zstdWrapper) Reset(reader io.Reader) error {
