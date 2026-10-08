@@ -22,10 +22,11 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"connectrpc.com/connect"
-	"github.com/klauspost/connect-compress/v2"
-	pingv1 "github.com/klauspost/connect-compress/v2/internal/gen/connect/ping/v1"
-	"github.com/klauspost/connect-compress/v2/internal/gen/connect/ping/v1/pingv1connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/klauspost/connect-compress/v3"
+	pingv1 "github.com/klauspost/connect-compress/v3/internal/gen/connect/ping/v1"
+	"github.com/klauspost/connect-compress/v3/internal/gen/connect/ping/v1/pingv1connect"
 )
 
 func ExampleWithAll() {
@@ -33,137 +34,162 @@ func ExampleWithAll() {
 	opts := compress.WithAll(compress.LevelBalanced)
 
 	// Create a server.
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opts)
-	srv := httptest.NewServer(h)
-	client := pingv1connect.NewPingServiceClient(
-		http.DefaultClient,
-		srv.URL,
-		opts,
-		// Compress requests with S2.
-		connect.WithSendCompression(compress.S2),
-	)
-	req := connect.NewRequest(&pingv1.PingRequest{
+	server := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(server, &pingServer{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, opts)
+	srv := httptest.NewServer(mux)
+	client := pingv1connect.NewPingServiceClient(connect.NewClient(
+		connecthttp.NewTransport(
+			http.DefaultClient,
+			srv.URL,
+			opts,
+			// Compress requests with S2.
+			connecthttp.WithSendCompression(compress.S2),
+		),
+	))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Some-Header", "hello from connect")
+	res, err := client.Ping(ctx, &pingv1.PingRequest{
 		Number: 42,
 	})
-	req.Header().Set("Some-Header", "hello from connect")
-	res, err := client.Ping(context.Background(), req)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println("The answer is", res.Msg)
-	fmt.Println(res.Header().Get("Some-Other-Header"))
+	fmt.Println("The answer is", res)
+	fmt.Println(info.ResponseHeader().Get("Some-Other-Header"))
 	//OUTPUT:
 	//hello from connect
 	//The answer is number:42
 	//hello!
 }
 
-func ExampleWithNew_zstd() {
+func ExampleNew_zstd() {
 	// Add Zstandard.
-	opt := compress.WithNew(compress.Zstandard, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
-	srv := httptest.NewServer(h)
-	client := pingv1connect.NewPingServiceClient(
-		http.DefaultClient,
-		srv.URL,
-		opt,
-		// Enable request compression
-		connect.WithSendCompression(compress.Zstandard),
-	)
-	req := connect.NewRequest(&pingv1.PingRequest{
+	opt := connecthttp.WithCompressors(compress.New(compress.Zstandard, compress.LevelBalanced))
+	server := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(server, &pingServer{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, opt)
+	srv := httptest.NewServer(mux)
+	client := pingv1connect.NewPingServiceClient(connect.NewClient(
+		connecthttp.NewTransport(
+			http.DefaultClient,
+			srv.URL,
+			opt,
+			// Enable request compression
+			connecthttp.WithSendCompression(compress.Zstandard),
+		),
+	))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Some-Header", "hello from connect")
+	res, err := client.Ping(ctx, &pingv1.PingRequest{
 		Number: 42,
 	})
-	req.Header().Set("Some-Header", "hello from connect")
-	res, err := client.Ping(context.Background(), req)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println("The answer is", res.Msg)
-	fmt.Println(res.Header().Get("Some-Other-Header"))
+	fmt.Println("The answer is", res)
+	fmt.Println(info.ResponseHeader().Get("Some-Other-Header"))
 	//OUTPUT:
 	//hello from connect
 	//The answer is number:42
 	//hello!
 }
 
-func ExampleWithNew_snappy() {
+func ExampleNew_snappy() {
 	// Add Zstandard.
-	opt := compress.WithNew(compress.Snappy, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
-	srv := httptest.NewServer(h)
-	client := pingv1connect.NewPingServiceClient(
-		http.DefaultClient,
-		srv.URL,
-		opt,
-		// Enable request compression
-		connect.WithSendCompression(compress.Snappy),
-	)
-	req := connect.NewRequest(&pingv1.PingRequest{
+	opt := connecthttp.WithCompressors(compress.New(compress.Snappy, compress.LevelBalanced))
+	server := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(server, &pingServer{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, opt)
+	srv := httptest.NewServer(mux)
+	client := pingv1connect.NewPingServiceClient(connect.NewClient(
+		connecthttp.NewTransport(
+			http.DefaultClient,
+			srv.URL,
+			opt,
+			// Enable request compression
+			connecthttp.WithSendCompression(compress.Snappy),
+		),
+	))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Some-Header", "hello from connect")
+	res, err := client.Ping(ctx, &pingv1.PingRequest{
 		Number: 42,
 	})
-	req.Header().Set("Some-Header", "hello from connect")
-	res, err := client.Ping(context.Background(), req)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println("The answer is", res.Msg)
-	fmt.Println(res.Header().Get("Some-Other-Header"))
+	fmt.Println("The answer is", res)
+	fmt.Println(info.ResponseHeader().Get("Some-Other-Header"))
 	//OUTPUT:
 	//hello from connect
 	//The answer is number:42
 	//hello!
 }
 
-func ExampleWithNew_s2() {
+func ExampleNew_s2() {
 	// Add Zstandard.
-	opt := compress.WithNew(compress.S2, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
-	srv := httptest.NewServer(h)
-	client := pingv1connect.NewPingServiceClient(
-		http.DefaultClient,
-		srv.URL,
-		opt,
-		// Enable request compression
-		connect.WithSendCompression(compress.S2),
-	)
-	req := connect.NewRequest(&pingv1.PingRequest{
+	opt := connecthttp.WithCompressors(compress.New(compress.S2, compress.LevelBalanced))
+	server := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(server, &pingServer{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, opt)
+	srv := httptest.NewServer(mux)
+	client := pingv1connect.NewPingServiceClient(connect.NewClient(
+		connecthttp.NewTransport(
+			http.DefaultClient,
+			srv.URL,
+			opt,
+			// Enable request compression
+			connecthttp.WithSendCompression(compress.S2),
+		),
+	))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Some-Header", "hello from connect")
+	res, err := client.Ping(ctx, &pingv1.PingRequest{
 		Number: 42,
 	})
-	req.Header().Set("Some-Header", "hello from connect")
-	res, err := client.Ping(context.Background(), req)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println("The answer is", res.Msg)
-	fmt.Println(res.Header().Get("Some-Other-Header"))
+	fmt.Println("The answer is", res)
+	fmt.Println(info.ResponseHeader().Get("Some-Other-Header"))
 	//OUTPUT:
 	//hello from connect
 	//The answer is number:42
 	//hello!
 }
 
-func ExampleWithNew_gzip() {
+func ExampleNew_gzip() {
 	// Add Zstandard.
-	opt := compress.WithNew(compress.Gzip, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
-	srv := httptest.NewServer(h)
-	client := pingv1connect.NewPingServiceClient(
-		http.DefaultClient,
-		srv.URL,
-		opt,
-		// Enable request compression
-		connect.WithSendCompression(compress.Gzip),
-	)
-	req := connect.NewRequest(&pingv1.PingRequest{
+	opt := connecthttp.WithCompressors(compress.New(compress.Gzip, compress.LevelBalanced))
+	server := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(server, &pingServer{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, opt)
+	srv := httptest.NewServer(mux)
+	client := pingv1connect.NewPingServiceClient(connect.NewClient(
+		connecthttp.NewTransport(
+			http.DefaultClient,
+			srv.URL,
+			opt,
+			// Enable request compression
+			connecthttp.WithSendCompression(compress.Gzip),
+		),
+	))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Some-Header", "hello from connect")
+	res, err := client.Ping(ctx, &pingv1.PingRequest{
 		Number: 42,
 	})
-	req.Header().Set("Some-Header", "hello from connect")
-	res, err := client.Ping(context.Background(), req)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println("The answer is", res.Msg)
-	fmt.Println(res.Header().Get("Some-Other-Header"))
+	fmt.Println("The answer is", res)
+	fmt.Println(info.ResponseHeader().Get("Some-Other-Header"))
 	//OUTPUT:
 	//hello from connect
 	//The answer is number:42
@@ -176,44 +202,49 @@ type pingServer struct {
 
 func (ps *pingServer) Ping(
 	ctx context.Context,
-	req *connect.Request[pingv1.PingRequest],
-) (*connect.Response[pingv1.PingResponse], error) {
-	// connect.Request and connect.Response give you direct access to headers and
-	// trailers. No context-based nonsense!
-	fmt.Println(req.Header().Get("Some-Header"))
-	res := connect.NewResponse(&pingv1.PingResponse{
-		// req.Msg is a strongly-typed *pingv1.PingRequest, so we can access its
+	req *pingv1.PingRequest,
+) (*pingv1.PingResponse, error) {
+	// connect.CallInfo gives you access to headers and trailers.
+	info, _ := connect.CallInfoForServerContext(ctx)
+	fmt.Println(info.RequestHeader().Get("Some-Header"))
+	res := &pingv1.PingResponse{
+		// req is a strongly-typed *pingv1.PingRequest, so we can access its
 		// fields without type assertions.
-		Number: req.Msg.Number,
-		Text:   req.Msg.Text,
-	})
-	res.Header().Set("Some-Other-Header", "hello!")
+		Number: req.Number,
+		Text:   req.Text,
+	}
+	info.ResponseHeader().Set("Some-Other-Header", "hello!")
 	return res, nil
 }
 
-func ExampleWithNew_minlz() {
+func ExampleNew_minlz() {
 	// Use MinLZ.
-	opt := compress.WithNew(compress.MinLZ, compress.LevelBalanced)
-	_, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opt)
-	srv := httptest.NewServer(h)
-	client := pingv1connect.NewPingServiceClient(
-		http.DefaultClient,
-		srv.URL,
-		opt,
-		// Enable request compression
-		connect.WithSendCompression(compress.MinLZ),
-	)
-	req := connect.NewRequest(&pingv1.PingRequest{
+	opt := connecthttp.WithCompressors(compress.New(compress.MinLZ, compress.LevelBalanced))
+	server := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(server, &pingServer{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, opt)
+	srv := httptest.NewServer(mux)
+	client := pingv1connect.NewPingServiceClient(connect.NewClient(
+		connecthttp.NewTransport(
+			http.DefaultClient,
+			srv.URL,
+			opt,
+			// Enable request compression
+			connecthttp.WithSendCompression(compress.MinLZ),
+		),
+	))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Some-Header", "hello from connect")
+	res, err := client.Ping(ctx, &pingv1.PingRequest{
 		Number: 42,
 		Text:   strings.Repeat("a", 50),
 	})
-	req.Header().Set("Some-Header", "hello from connect")
-	res, err := client.Ping(context.Background(), req)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println("The answer is", res.Msg.Number)
-	fmt.Println("Text is", res.Msg.Text)
+	fmt.Println("The answer is", res.Number)
+	fmt.Println("Text is", res.Text)
 	//OUTPUT:
 	//hello from connect
 	//The answer is 42

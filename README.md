@@ -1,6 +1,6 @@
 # connect-compress
 
-[![GoDoc](https://pkg.go.dev/badge/github.com/klauspost/connect-compress.svg)](https://pkg.go.dev/github.com/klauspost/connect-compress)
+[![GoDoc](https://pkg.go.dev/badge/github.com/klauspost/connect-compress/v3.svg)](https://pkg.go.dev/github.com/klauspost/connect-compress/v3)
 
 This package provides improved compression schemes for [Connect](https://github.com/connectrpc/connect-go).
 
@@ -8,34 +8,45 @@ Compression is provided from the [github.com/klauspost/compress](https://github.
 
 # Usage
 
-Import `github.com/klauspost/connect-compress/v2`.
+Import `github.com/klauspost/connect-compress/v3`.
 
-The `compress.WithAll` function will return an option that allows both client and servers to compress and decompress all
-formats.
+This version requires [Connect](https://github.com/connectrpc/connect-go) v2.
+
+The `compress.WithAll` function will return a `connecthttp.Option` that allows both client and servers to compress and
+decompress all formats.
 
 ```
     // Get the client and server option for all compressors...
     opts := compress.WithAll(compress.LevelBalanced)
 
     // enable on server
-    _, h := pingv1connect.NewPingServiceHandler(&pingServer{}, opts)
+    server := connect.NewServer()
+    pingv1connect.RegisterPingServiceHandler(server, &pingServer{})
+    mux := http.NewServeMux()
+    connecthttp.Mount(mux, server, opts)
 
     // enable on client
-    client := pingv1connect.NewPingServiceClient(http.DefaultClient, url, opts)
+    client := pingv1connect.NewPingServiceClient(connect.NewClient(
+        connecthttp.NewTransport(http.DefaultClient, url, opts),
+    ))
 
 ```
 
-By default, the order of preference by the clients is S2, Snappy, Zstandard, Gzip.
+By default, the order of preference by the clients is MinLZ, S2, Snappy, Zstandard, Gzip.
 
-To enable client compression and force a specific method use `connect.WithSendCompression(...)`
-with one of the 4 provided compression options.
+Note that `connecthttp.WithCompressors` replaces any previously configured compressors, including the default gzip.
+To pick individual compression methods, use `compress.New` and pass them all to a single `connecthttp.WithCompressors`.
+
+To enable client compression and force a specific method use `connecthttp.WithSendCompression(...)`
+with one of the 5 provided compression options.
 
 * `S2` can be selected for transparent compression, since its performance impact is small.
 * `Snappy` can be used as a more platform independent alternative, with overall less compression.
 * `Zstandard` can be used for efficient compression at good speeds.
+* `MinLZ` provides better compression than Snappy/S2 at similar speeds.
 * `Gzip` is the safe fallback.
 
-For more details and options see the [documentation](https://pkg.go.dev/github.com/klauspost/connect-compress).
+For more details and options see the [documentation](https://pkg.go.dev/github.com/klauspost/connect-compress/v3).
 
 Note than when `OptSmallWindow` is used, it must be used on both the client and server.
 

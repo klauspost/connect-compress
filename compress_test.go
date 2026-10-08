@@ -19,7 +19,7 @@ import (
 	"io"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 func makeTestData(size int) []byte {
@@ -30,27 +30,31 @@ func makeTestData(size int) []byte {
 	return data
 }
 
-func roundtrip(t *testing.T, comp connect.Compressor, decomp connect.Decompressor, data []byte) {
+func roundtrip(t *testing.T, comp connect.Compressor, data []byte) {
 	t.Helper()
 
 	var compressed bytes.Buffer
-	comp.Reset(&compressed)
-	_, err := comp.Write(data)
+	w, err := comp.Compress(&compressed)
+	if err != nil {
+		t.Fatalf("compress: %v", err)
+	}
+	_, err = w.Write(data)
 	if err != nil {
 		t.Fatalf("compress write: %v", err)
 	}
-	if err := comp.Close(); err != nil {
+	if err := w.Close(); err != nil {
 		t.Fatalf("compress close: %v", err)
 	}
 
-	if err := decomp.Reset(&compressed); err != nil {
-		t.Fatalf("decomp reset: %v", err)
+	r, err := comp.Decompress(&compressed)
+	if err != nil {
+		t.Fatalf("decompress: %v", err)
 	}
-	decompressed, err := io.ReadAll(decomp)
+	decompressed, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("decomp read: %v", err)
 	}
-	if err := decomp.Close(); err != nil {
+	if err := r.Close(); err != nil {
 		t.Fatalf("decomp close: %v", err)
 	}
 
@@ -63,19 +67,16 @@ func TestRoundtrip(t *testing.T) {
 	sizes := []int{0, 1, 100, 1024, 64 * 1024, 1024 * 1024}
 
 	type compressorConfig struct {
-		name    string
-		factory func(Level, Opts) (func() connect.Decompressor, func() connect.Compressor)
-		opts    []Opts
+		name string
+		opts []Opts
 	}
 
 	configs := []compressorConfig{
-		{name: Gzip, factory: gzComp, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression, OptStatelessGzip}},
-		{name: Zstandard, factory: zstdComp, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression}},
-		{name: Snappy, factory: func(l Level, o Opts) (func() connect.Decompressor, func() connect.Compressor) {
-			return s2Comp(l, o|optSnappy)
-		}, opts: []Opts{0, OptAllowMultithreadedCompression}},
-		{name: S2, factory: s2Comp, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression}},
-		{name: MinLZ, factory: mzComp, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression}},
+		{name: Gzip, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression, OptStatelessGzip}},
+		{name: Zstandard, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression}},
+		{name: Snappy, opts: []Opts{0, OptAllowMultithreadedCompression}},
+		{name: S2, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression}},
+		{name: MinLZ, opts: []Opts{0, OptSmallWindow, OptAllowMultithreadedCompression}},
 	}
 
 	levels := []Level{LevelFastest, LevelBalanced, LevelSmallest}
@@ -105,13 +106,14 @@ func TestRoundtrip(t *testing.T) {
 				}
 
 				t.Run(name, func(t *testing.T) {
-					dFactory, cFactory := cfg.factory(level, opt)
-					decomp := dFactory()
-					comp := cFactory()
+					comp := New(cfg.name, level, opt)
+					if comp.Name() != cfg.name {
+						t.Fatalf("name: got %q, want %q", comp.Name(), cfg.name)
+					}
 
 					for _, size := range sizes {
 						data := makeTestData(size)
-						roundtrip(t, comp, decomp, data)
+						roundtrip(t, comp, data)
 					}
 
 					// Test re-use with different data pattern
@@ -120,7 +122,7 @@ func TestRoundtrip(t *testing.T) {
 						for i := range data {
 							data[i] ^= 0xFF
 						}
-						roundtrip(t, comp, decomp, data)
+						roundtrip(t, comp, data)
 					}
 				})
 			}
