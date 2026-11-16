@@ -18,8 +18,10 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/s2"
 	"github.com/klauspost/compress/zstd"
@@ -103,76 +105,169 @@ const (
 	optSnappy
 )
 
-type compressorOption struct {
-	connect.ClientOption
-	connect.HandlerOption
-}
-
 // WithAll returns the client and handler option for all compression methods.
 // Order of preference is MinLZ, S2, Snappy, Zstandard, Gzip.
-func WithAll(level Level, options ...Opts) connect.Option {
-	var opts []connect.Option
+// Note that this replaces any previously configured compressors,
+// including the default gzip.
+func WithAll(level Level, options ...Opts) connecthttp.Option {
+	var compressors []connect.Compressor
 
-	for _, name := range []string{Gzip, Zstandard, Snappy, S2, MinLZ} {
-		opts = append(opts, WithNew(name, level, options...))
+	for _, name := range []string{MinLZ, S2, Snappy, Zstandard, Gzip} {
+		compressors = append(compressors, New(name, level, options...))
 	}
-	return connect.WithOptions(opts...)
+	return connecthttp.WithCompressors(compressors...)
 }
 
-// WithNew returns client and handler options for a single compression method.
-// Name must be one of the predefined in this package.
-func WithNew(name string, level Level, options ...Opts) connect.Option {
+// New returns a compressor for a single compression method.
+// Name must be one of the predefined in this package,
+// otherwise New panics.
+func New(name string, level Level, options ...Opts) connect.Compressor {
 	var o Opts
 	for _, opt := range options {
 		o = o | opt
 	}
-	var d func() connect.Decompressor
-	var c func() connect.Compressor
+	var a algorithm
 	switch name {
 	case Gzip:
-		d, c = gzComp(level, o)
+		a = gzComp(level, o)
 	case Zstandard:
-		d, c = zstdComp(level, o)
+		a = zstdComp(level, o)
 	case Snappy:
 		o |= optSnappy
-		d, c = s2Comp(level, o)
+		a = s2Comp(level, o)
 	case S2:
-		d, c = s2Comp(level, o)
+		a = s2Comp(level, o)
 	case MinLZ:
-		d, c = mzComp(level, o)
+		a = mzComp(level, o)
 	default:
 		panic(fmt.Errorf("unknown compression name: %s", name))
 	}
-	return &compressorOption{
-		ClientOption:  connect.WithAcceptCompression(name, d, c),
-		HandlerOption: connect.WithCompression(name, d, c),
+	return &compressor{name: name, algorithm: a}
+}
+
+// algorithm creates the reusable writers and readers of a compression method.
+type algorithm interface {
+	newWriter() resetWriter
+	newReader() resetReader
+}
+
+type resetWriter interface {
+	io.WriteCloser
+	Reset(io.Writer)
+}
+
+type resetReader interface {
+	io.ReadCloser
+	Reset(io.Reader) error
+}
+
+// compressor implements connect.Compressor by pooling
+// the writers and readers of an algorithm.
+type compressor struct {
+	algorithm
+	name    string
+	writers sync.Pool
+	readers sync.Pool
+}
+
+func (c *compressor) Name() string {
+	return c.name
+}
+
+func (c *compressor) Compress(dst io.Writer) (io.WriteCloser, error) {
+	w, ok := c.writers.Get().(*compressWriter)
+	if !ok {
+		w = &compressWriter{resetWriter: c.newWriter(), pool: c}
 	}
+	w.Reset(dst)
+	w.closed = false
+	return w, nil
 }
 
-func gzComp(level Level, o Opts) (d func() connect.Decompressor, c func() connect.Compressor) {
-	return func() connect.Decompressor {
-			return &gzip.Reader{}
-		}, func() connect.Compressor {
-			if o.contains(OptStatelessGzip) {
-				gz, _ := gzip.NewWriterLevel(io.Discard, gzip.StatelessCompression)
-				return gz
-			}
-			switch level {
-			case LevelFastest:
-				gz, _ := gzip.NewWriterLevel(io.Discard, 1)
-				return gz
-			case LevelBalanced:
-				gz, _ := gzip.NewWriterLevel(io.Discard, 5)
-				return gz
-			case LevelSmallest:
-				gz, _ := gzip.NewWriterLevel(io.Discard, 9)
-				return gz
-			}
-			return gzip.NewWriter(io.Discard)
-		}
+func (c *compressor) Decompress(src io.Reader) (io.ReadCloser, error) {
+	r, ok := c.readers.Get().(*decompressReader)
+	if !ok {
+		r = &decompressReader{resetReader: c.newReader(), pool: c}
+	}
+	if err := r.Reset(src); err != nil {
+		return nil, err
+	}
+	r.closed = false
+	return r, nil
 }
 
-func zstdComp(level Level, o Opts) (d func() connect.Decompressor, c func() connect.Compressor) {
+// compressWriter returns itself to the pool on Close.
+type compressWriter struct {
+	resetWriter
+	pool   *compressor
+	closed bool
+}
+
+func (w *compressWriter) Close() error {
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	if err := w.resetWriter.Close(); err != nil {
+		return err
+	}
+	w.pool.writers.Put(w)
+	return nil
+}
+
+// decompressReader returns itself to the pool on Close.
+type decompressReader struct {
+	resetReader
+	pool   *compressor
+	closed bool
+}
+
+func (r *decompressReader) Close() error {
+	if r.closed {
+		return nil
+	}
+	r.closed = true
+	if err := r.resetReader.Close(); err != nil {
+		return err
+	}
+	r.pool.readers.Put(r)
+	return nil
+}
+
+type gzipAlgorithm struct {
+	level int
+}
+
+func gzComp(level Level, o Opts) algorithm {
+	if o.contains(OptStatelessGzip) {
+		return gzipAlgorithm{level: gzip.StatelessCompression}
+	}
+	switch level {
+	case LevelFastest:
+		return gzipAlgorithm{level: 1}
+	case LevelBalanced:
+		return gzipAlgorithm{level: 5}
+	case LevelSmallest:
+		return gzipAlgorithm{level: 9}
+	}
+	return gzipAlgorithm{level: gzip.DefaultCompression}
+}
+
+func (g gzipAlgorithm) newWriter() resetWriter {
+	gz, _ := gzip.NewWriterLevel(io.Discard, g.level)
+	return gz
+}
+
+func (g gzipAlgorithm) newReader() resetReader {
+	return &gzip.Reader{}
+}
+
+type zstdAlgorithm struct {
+	copts []zstd.EOption
+	dopts []zstd.DOption
+}
+
+func zstdComp(level Level, o Opts) algorithm {
 	copts := []zstd.EOption{zstd.WithLowerEncoderMem(true)}
 	dopts := []zstd.DOption{zstd.WithDecoderLowmem(true), zstd.WithDecoderConcurrency(1)}
 	if o.contains(OptSmallWindow) {
@@ -209,17 +304,21 @@ func zstdComp(level Level, o Opts) (d func() connect.Decompressor, c func() conn
 			copts = append(copts, zstd.WithWindowSize(4<<20))
 		}
 	}
-	return func() connect.Decompressor {
-			zs, _ := zstd.NewReader(nil, dopts...)
-			z := &zstdWrapper{dec: zs}
-			runtime.AddCleanup(z, func(dec *zstd.Decoder) {
-				dec.Close()
-			}, zs)
-			return z
-		}, func() connect.Compressor {
-			zs, _ := zstd.NewWriter(nil, copts...)
-			return zs
-		}
+	return zstdAlgorithm{copts: copts, dopts: dopts}
+}
+
+func (z zstdAlgorithm) newWriter() resetWriter {
+	zs, _ := zstd.NewWriter(nil, z.copts...)
+	return zs
+}
+
+func (a zstdAlgorithm) newReader() resetReader {
+	zs, _ := zstd.NewReader(nil, a.dopts...)
+	z := &zstdWrapper{dec: zs}
+	runtime.AddCleanup(z, func(dec *zstd.Decoder) {
+		dec.Close()
+	}, zs)
+	return z
 }
 
 type zstdWrapper struct {
@@ -239,7 +338,12 @@ func (z *zstdWrapper) Reset(reader io.Reader) error {
 	return z.dec.Reset(reader)
 }
 
-func s2Comp(level Level, o Opts) (d func() connect.Decompressor, c func() connect.Compressor) {
+type s2Algorithm struct {
+	wopts []s2.WriterOption
+	ropts []s2.ReaderOption
+}
+
+func s2Comp(level Level, o Opts) algorithm {
 	var wopts []s2.WriterOption
 	var ropts []s2.ReaderOption
 	if o.contains(optSnappy) {
@@ -264,13 +368,16 @@ func s2Comp(level Level, o Opts) (d func() connect.Decompressor, c func() connec
 			wopts = append(wopts, s2.WriterBlockSize(4<<20))
 		}
 	}
+	return s2Algorithm{wopts: wopts, ropts: ropts}
+}
 
-	return func() connect.Decompressor {
-			dec := s2.NewReader(nil, ropts...)
-			return &s2rWrapper{dec: dec}
-		}, func() connect.Compressor {
-			return s2.NewWriter(nil, wopts...)
-		}
+func (s s2Algorithm) newWriter() resetWriter {
+	return s2.NewWriter(nil, s.wopts...)
+}
+
+func (s s2Algorithm) newReader() resetReader {
+	dec := s2.NewReader(nil, s.ropts...)
+	return &s2rWrapper{dec: dec}
 }
 
 type s2rWrapper struct {
@@ -291,7 +398,12 @@ func (s *s2rWrapper) Reset(reader io.Reader) error {
 	return nil
 }
 
-func mzComp(level Level, o Opts) (d func() connect.Decompressor, c func() connect.Compressor) {
+type mzAlgorithm struct {
+	wopts []minlz.WriterOption
+	ropts []minlz.ReaderOption
+}
+
+func mzComp(level Level, o Opts) algorithm {
 	var wopts []minlz.WriterOption
 	var ropts []minlz.ReaderOption
 	if o.contains(OptSmallWindow) {
@@ -314,13 +426,16 @@ func mzComp(level Level, o Opts) (d func() connect.Decompressor, c func() connec
 			wopts = append(wopts, minlz.WriterBlockSize(8<<20))
 		}
 	}
+	return mzAlgorithm{wopts: wopts, ropts: ropts}
+}
 
-	return func() connect.Decompressor {
-			dec := minlz.NewReader(nil, ropts...)
-			return &mzWrapper{dec: dec}
-		}, func() connect.Compressor {
-			return minlz.NewWriter(nil, wopts...)
-		}
+func (m mzAlgorithm) newWriter() resetWriter {
+	return minlz.NewWriter(nil, m.wopts...)
+}
+
+func (m mzAlgorithm) newReader() resetReader {
+	dec := minlz.NewReader(nil, m.ropts...)
+	return &mzWrapper{dec: dec}
 }
 
 type mzWrapper struct {
